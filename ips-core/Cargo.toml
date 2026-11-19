@@ -1,0 +1,8 @@
+[package]
+name = "ips-core"
+version = "1.0.0"
+edition = "2021"
+description = "Tier-2 User-space DPI & RCU Engine for Pre-Firewall S/W IDS/IPS"
+
+[dependencies]
+arc-swap = "1.7"
