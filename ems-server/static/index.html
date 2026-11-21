@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pre-Firewall S/W IDS/IPS - Enterprise SOC EMS Console v1.1.0</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card: #111827;
+      --card-alt: #1e293b;
+      --border: #26334d;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --primary: #38bdf8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --purple: #a855f7;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
+    }
+    .card-panel {
+      background-color: var(--card);
+      border: 1px solid var(--border);
+    }
+    .card-sub {
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+    }
+    @keyframes flowPulse {
+      0% { opacity: 0.35; transform: translateX(-2px); }
+      50% { opacity: 1; transform: translateX(2px); }
+      100% { opacity: 0.35; transform: translateX(-2px); }
+    }
+    .flow-arrow {
+      animation: flowPulse 1.4s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="p-4 m-0 antialiased select-none">
+  <div class="max-w-[1440px] mx-auto space-y-3">
+
+    <!-- 1. TOP HEADER: System Identity, Hardware Bypass Relay, RCU Hot-Swap, KCMVP Status -->
+    <header class="card-panel rounded-lg p-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="px-2.5 py-1 rounded bg-sky-500 text-slate-950 font-mono font-extrabold text-xs tracking-wider">
+          PRE-FW IPS EMS v1.1.0
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-sm font-bold text-slate-100">전사 통합 보안 아키텍처 관제 콘솔 (Enterprise Defense-in-Depth SOC)</h1>
+            <span id="conn-badge" class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-mono text-xs">
+              ● API LIVE (1s Polling)
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5">
+            [STAGE 1: 경계 라우터] ➔ [STAGE 2: 1차 방어선 Pre-Firewall S/W IDS/IPS] ➔ [STAGE 3: 차세대 방화벽(NGFW)] ➔ [STAGE 4: 코어 스위치/TAP] ➔ [STAGE 5: 내부 서버군 &amp; SIEM/SOAR/CTI]
+          </p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <!-- Hardware Bypass NIC Control -->
+        <div class="card-sub px-2.5 py-1.5 rounded flex items-center gap-2">
+          <span class="text-slate-400">Bypass NIC:</span>
+          <span id="hdr-bypass-state" class="font-mono font-bold text-emerald-400">INLINE (8ms Watchdog)</span>
+          <button onclick="apiToggleBypass()" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 font-mono text-xs text-slate-200 transition">
+            릴레이 전환
+          </button>
+        </div>
+
+        <!-- RCU Zero-Downtime Hot-Reload -->
+        <div class="card-sub px-2.5 py-1.5 rounded flex items-center gap-2">
+          <span class="text-slate-400">RCU Ruleset:</span>
+          <span id="hdr-rcu-ver" class="font-mono font-bold text-sky-400">v1.0.42 (25,410 Rules)</span>
+          <button onclick="apiTriggerRcuSwap()" class="px-2 py-0.5 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-mono font-bold text-xs transition">
+            무중단 Hot-Swap
+          </button>
+        </div>
+
+        <!-- KCMVP Badge -->
+        <div class="card-sub px-2.5 py-1.5 rounded font-mono text-xs text-emerald-400">
+          🔒 KCMVP ARIA-256 / CC EAL4
+        </div>
+      </div>
+    </header>
+
+    <!-- 2. SCENARIO & A/B ARCHITECTURE MODE CONTROLLER -->
+    <section class="card-panel rounded-lg p-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-1.5 text-xs">
+        <span class="font-bold text-slate-300 mr-1">트래픽 &amp; 위협 주입 시나리오:</span>
+        <button onclick="apiSetScenario('normal')" id="btn-sc-normal" class="px-3 py-1.5 rounded border border-slate-700 bg-slate-900 hover:border-sky-400 font-medium transition">
+          ① 평시 업무 + 백업 스트림 (22G)
+        </button>
+        <button onclick="apiSetScenario('volumetric')" id="btn-sc-volumetric" class="px-3 py-1.5 rounded border border-slate-700 bg-slate-900 hover:border-sky-400 font-medium transition">
+          ② 복합 DDoS + SYN Flood (40G)
+        </button>
+        <button onclick="apiSetScenario('apt')" id="btn-sc-apt" class="px-3 py-1.5 rounded border border-slate-700 bg-slate-900 hover:border-sky-400 font-medium transition">
+          ③ 지능형 웹 취약점(Log4Shell) + TLS 1.3 C2 비콘
+        </button>
+        <button onclick="apiSetScenario('evasion')" id="btn-sc-evasion" class="px-3 py-1.5 rounded border border-slate-700 bg-slate-900 hover:border-sky-400 font-medium transition">
+          ④ OS 불일치 오탐 유도 &amp; 세그먼트 중첩 우회
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2 text-xs card-sub px-3 py-1.5 rounded">
+        <span class="font-bold text-slate-300">전사 보안 퍼포먼스 A/B 비교:</span>
+        <button onclick="apiSetIpsEnabled(true)" id="btn-ips-on" class="px-2.5 py-1 rounded font-mono font-bold bg-sky-500 text-slate-950 transition">
+          1차 방어선 IPS 가동 (ON)
+        </button>
+        <button onclick="apiSetIpsEnabled(false)" id="btn-ips-off" class="px-2.5 py-1 rounded font-mono text-slate-400 hover:text-slate-200 transition">
+          IPS 미적용 (방화벽 직결)
+        </button>
+      </div>
+    </section>
+
+    <!-- 3. TOP 4 KPI CARDS (End-to-End Architecture Performance) -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="card-panel rounded-lg p-3">
+        <div class="flex justify-between text-xs text-slate-400">
+          <span>STAGE 1: 외부 유입 총 트래픽 (WAN Ingress)</span>
+          <span class="font-mono text-sky-400">Tier-0 RX</span>
+        </div>
+        <div class="mt-1 flex items-baseline justify-between">
+          <span id="kpi-wan-gbps" class="text-2xl font-extrabold font-mono tabular-nums text-slate-100">40.0 Gbps</span>
+          <span id="kpi-wan-mpps" class="text-xs font-mono text-slate-400">58.8 Mpps</span>
+        </div>
+        <div id="kpi-wan-sub" class="mt-1.5 text-xs font-mono text-amber-400">
+          악성 공격 트래픽: 26.0 Gbps (65.0%)
+        </div>
+      </div>
+
+      <div class="card-panel rounded-lg p-3">
+        <div class="flex justify-between text-xs text-slate-400">
+          <span>STAGE 2: 1차 방어선(IDS/IPS) 사전 소멸·정화</span>
+          <span class="font-mono text-emerald-400">XDP + Rust DPI</span>
+        </div>
+        <div class="mt-1 flex items-baseline justify-between">
+          <span id="kpi-ips-rate" class="text-2xl font-extrabold font-mono tabular-nums text-emerald-400">99.9% 차단</span>
+          <span id="kpi-ips-lat" class="text-xs font-mono text-sky-400">지연: 38.4 μs</span>
+        </div>
+        <div id="kpi-ips-sub" class="mt-1.5 text-xs font-mono text-slate-400">
+          XDP Drop: 25.2G | DPI Drop: 0.8G | Shunt: 5.2G
+        </div>
+      </div>
+
+      <div class="card-panel rounded-lg p-3">
+        <div class="flex justify-between text-xs text-slate-400">
+          <span>STAGE 3: 후단 차세대 방화벽(NGFW) 생존성</span>
+          <span class="font-mono text-sky-400">Firewall Shield</span>
+        </div>
+        <div class="mt-1 flex items-baseline justify-between">
+          <span id="kpi-fw-cpu" class="text-2xl font-extrabold font-mono tabular-nums text-emerald-400">CPU 22.3%</span>
+          <span id="kpi-fw-sess" class="text-xs font-mono text-emerald-400">세션: 17.9% (안전)</span>
+        </div>
+        <div id="kpi-fw-sub" class="mt-1.5 text-xs font-mono text-emerald-400">
+          ● 방화벽 도달 트래픽: 14.0 Gbps (대역폭 65% 절감)
+        </div>
+      </div>
+
+      <div class="card-panel rounded-lg p-3">
+        <div class="flex justify-between text-xs text-slate-400">
+          <span>STAGE 5: 내부 서버 가용성 &amp; SIEM EPS 절감</span>
+          <span class="font-mono text-purple-400">SOC &amp; SLA</span>
+        </div>
+        <div class="mt-1 flex items-baseline justify-between">
+          <span id="kpi-soc-eps" class="text-2xl font-extrabold font-mono tabular-nums text-sky-400">-98.4% EPS</span>
+          <span id="kpi-soc-sla" class="text-xs font-mono text-emerald-400">SLA: 99.999%</span>
+        </div>
+        <div id="kpi-soc-sub" class="mt-1.5 text-xs font-mono text-slate-400">
+          원시 85,400 EPS ➔ 압축 1,366 EPS | 오차단: 0건
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. FULL 5-STAGE SECURITY ARCHITECTURE PIPELINE TOPOLOGY -->
+    <section class="card-panel rounded-lg p-4 space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold text-slate-200">전사 보안 아키텍처 5단계 실시간 트래픽 정화 파이프라인 (각 단계 클릭 시 아키텍처 역할 및 연동 스펙 상세 표시)</span>
+        </div>
+        <div class="flex items-center gap-4 text-xs font-mono">
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>Tier-1/2 소멸 악성 트래픽</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block"></span>Elephant Flow Fast-Shunt</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>L7 검증 완료 정상 트래픽</span>
+        </div>
+      </div>
+
+      <!-- 5-Stage Pipeline Boxes -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-stretch text-xs">
+
+        <!-- STAGE 1: WAN / BGP Router -->
+        <div onclick="selectStage('stage1')" id="box-stage1" class="lg:col-span-2 card-sub rounded-lg p-3 cursor-pointer hover:border-sky-400 transition flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between font-mono text-slate-400">
+              <span>STAGE 1</span>
+              <span class="text-sky-400">WAN Edge</span>
+            </div>
+            <div class="font-bold text-sm text-slate-100 mt-1">BGP 경계 라우터</div>
+            <p class="text-xs text-slate-400 mt-1">ISP 인입 관문 및 BGP Flowspec 원격 Blackhole 연동</p>
+          </div>
+          <div class="mt-3 pt-2 border-t border-slate-800 font-mono space-y-1">
+            <div class="flex justify-between"><span>인입 대역폭:</span><span id="st1-gbps" class="font-bold text-slate-100">40.0 Gbps</span></div>
+            <div class="flex justify-between"><span>패킷 유입률:</span><span id="st1-mpps" class="text-slate-300">58.8 Mpps</span></div>
+            <div class="flex justify-between"><span>Flowspec:</span><span id="st1-bgp" class="text-emerald-400">2 Prefixes</span></div>
+          </div>
+        </div>
+
+        <!-- STAGE 2: Pre-Firewall S/W IDS/IPS (CORE SYSTEM) -->
+        <div onclick="selectStage('stage2')" id="box-stage2" class="lg:col-span-4 card-sub rounded-lg p-3 cursor-pointer border-2 border-sky-400 transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="px-2 py-0.5 rounded bg-sky-500 text-slate-950 font-mono font-extrabold text-xs">STAGE 2 · 1차 방어선 (개발 코어)</span>
+              <span id="st2-mode" class="font-mono text-xs text-emerald-400">● ACTIVE INLINE</span>
+            </div>
+            <div class="font-bold text-sm text-slate-100 mt-1">Pre-Firewall S/W IDS/IPS Engine</div>
+
+            <div class="grid grid-cols-3 gap-1.5 mt-2">
+              <div class="p-2 rounded bg-slate-900 border border-slate-800">
+                <div class="font-mono font-bold text-sky-400">Tier 1: eBPF/XDP</div>
+                <div id="st2-t1" class="font-mono text-xs text-red-400 font-bold mt-0.5">Drop: 25.2G</div>
+                <div class="text-slate-400 text-xs mt-0.5">LPM Trie 1.84M IP</div>
+              </div>
+              <div class="p-2 rounded bg-slate-900 border border-slate-800">
+                <div class="font-mono font-bold text-sky-400">Tier 2: Rust DPI</div>
+                <div id="st2-t2" class="font-mono text-xs text-amber-400 font-bold mt-0.5">Drop: 0.8G</div>
+                <div class="text-slate-400 text-xs mt-0.5">Vectorscan + RCU</div>
+              </div>
+              <div class="p-2 rounded bg-slate-900 border border-slate-800">
+                <div class="font-mono font-bold text-sky-400">Tier 3: AI &amp; PCAP</div>
+                <div id="st2-t3" class="font-mono text-xs text-emerald-400 font-bold mt-0.5">JA4+ONNX: OK</div>
+                <div class="text-slate-400 text-xs mt-0.5">RingBuf Forensics</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3 pt-2 border-t border-slate-800 space-y-1">
+            <div class="flex justify-between font-mono text-xs">
+              <span class="text-slate-400">방화벽 진입 전 정화 비율:</span>
+              <span id="st2-ratio-txt" class="font-bold text-emerald-400">악성 26.0G 소멸 ➔ 정화 14.0G 전달</span>
+            </div>
+            <div class="w-full h-2.5 rounded overflow-hidden bg-slate-900 flex">
+              <div id="st2-bar-drop" class="bg-red-500 h-full transition-all" style="width: 65%"></div>
+              <div id="st2-bar-shunt" class="bg-sky-400 h-full transition-all" style="width: 13%"></div>
+              <div id="st2-bar-clean" class="bg-emerald-400 h-full transition-all" style="width: 22%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STAGE 3: 2nd Line NGFW -->
+        <div onclick="selectStage('stage3')" id="box-stage3" class="lg:col-span-2 card-sub rounded-lg p-3 cursor-pointer hover:border-sky-400 transition flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between font-mono text-slate-400">
+              <span>STAGE 3</span>
+              <span class="text-emerald-400">2차 방어선</span>
+            </div>
+            <div class="font-bold text-sm text-slate-100 mt-1">차세대 방화벽 (NGFW)</div>
+            <p class="text-xs text-slate-400 mt-1">Stateful 세션 테이블 유지, Zone 접근통제 및 VPN</p>
+          </div>
+          <div class="mt-3 pt-2 border-t border-slate-800 font-mono space-y-1">
+            <div class="flex justify-between"><span>도달 트래픽:</span><span id="st3-gbps" class="font-bold text-emerald-400">14.0 Gbps</span></div>
+            <div class="flex justify-between"><span>세션 점유율:</span><span id="st3-sess" class="text-emerald-400">17.9% (89만)</span></div>
+            <div class="flex justify-between"><span>방화벽 상태:</span><span id="st3-status" class="font-bold text-emerald-400">OPTIMAL</span></div>
+          </div>
+        </div>
+
+        <!-- STAGE 4: Core Switch / SSL Visibility / Network TAP -->
+        <div onclick="selectStage('stage4')" id="box-stage4" class="lg:col-span-2 card-sub rounded-lg p-3 cursor-pointer hover:border-sky-400 transition flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between font-mono text-slate-400">
+              <span>STAGE 4</span>
+              <span class="text-purple-400">Core Network</span>
+            </div>
+            <div class="font-bold text-sm text-slate-100 mt-1">코어 스위치 &amp; TAP</div>
+            <p class="text-xs text-slate-400 mt-1">L3 백본 스위치, SSL 가시성 및 East-West 미러링</p>
+          </div>
+          <div class="mt-3 pt-2 border-t border-slate-800 font-mono space-y-1">
+            <div class="flex justify-between"><span>East-West TAP:</span><span class="text-sky-400">6.4 Gbps</span></div>
+            <div class="flex justify-between"><span>패킷 드롭률:</span><span id="st4-drop" class="text-emerald-400">0.000%</span></div>
+            <div class="flex justify-between"><span>스위치 상태:</span><span id="st4-status" class="font-bold text-emerald-400">OPTIMAL</span></div>
+          </div>
+        </div>
+
+        <!-- STAGE 5: Protected Servers & SOC Ecosystem -->
+        <div onclick="selectStage('stage5')" id="box-stage5" class="lg:col-span-2 card-sub rounded-lg p-3 cursor-pointer hover:border-sky-400 transition flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between font-mono text-slate-400">
+              <span>STAGE 5</span>
+              <span class="text-amber-400">Assets &amp; SOC</span>
+            </div>
+            <div class="font-bold text-sm text-slate-100 mt-1">내부 서버 &amp; 보안솔루션</div>
+            <p class="text-xs text-slate-400 mt-1">보호 서버(CMDB 428대) 및 SIEM·SOAR·CTI·EDR</p>
+          </div>
+          <div class="mt-3 pt-2 border-t border-slate-800 font-mono space-y-1">
+            <div class="flex justify-between"><span>서버 가용성:</span><span id="st5-sla" class="font-bold text-emerald-400">99.999%</span></div>
+            <div class="flex justify-between"><span>SIEM 전송률:</span><span id="st5-eps" class="text-sky-400">1,366 EPS</span></div>
+            <div class="flex justify-between"><span>오탐(FP) 차단:</span><span id="st5-fp" class="text-emerald-400">0 건</span></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Stage Deep-Dive Detail Banner -->
+      <div class="card-sub rounded-lg p-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <span id="stage-detail-badge" class="px-2 py-0.5 rounded bg-sky-500 text-slate-950 font-mono font-bold">STAGE 2 아키텍처 역할</span>
+            <span id="stage-detail-title" class="font-bold text-slate-100">1차 방어선: Pre-Firewall S/W IDS/IPS (Tier 1 XDP + Tier 2 Rust DPI + Tier 3 AI)</span>
+          </div>
+          <p id="stage-detail-desc" class="text-slate-400 leading-relaxed">
+            방화벽 앞단에서 eBPF/XDP(`xdp_pre_filter.bpf.c`)로 초당 수천만 개의 볼륨 공격 패킷을 커널 `sk_buff` 할당 전에 즉시 소멸시키고, 안전한 대용량 세션(Elephant Flow)은 하드웨어 리다이렉트하며, L7 정밀 페이로드만 Rust 워커(`rcu_ruleset.rs`)와 자산 컨텍스트 DB로 검사하여 후단 방화벽과 내부 서버를 완벽히 보호합니다.
+          </p>
+        </div>
+        <div id="stage-detail-kpis" class="shrink-0 p-2.5 rounded bg-slate-900 border border-slate-800 font-mono text-xs space-y-1">
+          <div>• XDP LPM Trie 조회: <span class="text-emerald-400">18 ns (나노초)</span></div>
+          <div>• AF_XDP + Vectorscan 지연: <span class="text-sky-400">38.4 μs</span></div>
+          <div>• RCU 룰 스왑 패킷 드롭: <span class="text-emerald-400">0 Packet Loss</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. MIDDLE ROW: Live Time-Series Performance Canvas Chart + 32-Core Symmetric RSS AF_XDP Matrix -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-3">
+      <!-- Live Time-Series Chart (7 cols) -->
+      <div class="lg:col-span-7 card-panel rounded-lg p-3 flex flex-col justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800 text-xs">
+          <span class="font-bold text-slate-200">실시간 트래픽 정화 타임라인 (WAN 유입 vs XDP/DPI 사전 차단 vs 방화벽 도달 대역폭)</span>
+          <div class="flex items-center gap-3 font-mono text-xs">
+            <span class="text-slate-300">━ WAN 총 유입(Gbps)</span>
+            <span class="text-red-400">━ IPS 차단(Gbps)</span>
+            <span class="text-emerald-400">━ NGFW 도달(Gbps)</span>
+          </div>
+        </div>
+        <div class="mt-2">
+          <canvas id="telemetryChart" width="760" height="175" class="w-full h-[175px] rounded bg-slate-950 border border-slate-800"></canvas>
+        </div>
+      </div>
+
+      <!-- 32-Core Symmetric RSS & NUMA Locality Matrix (5 cols) -->
+      <div class="lg:col-span-5 card-panel rounded-lg p-3 flex flex-col justify-between">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-800 text-xs">
+          <span class="font-bold text-slate-200">32-Core Symmetric RSS &amp; AF_XDP Zero-Copy 부하 매트릭스</span>
+          <span class="font-mono text-xs text-sky-400">NUMA Node 0 &amp; 1 (1GB Hugepages)</span>
+        </div>
+        <div id="core-matrix" class="grid grid-cols-8 gap-1.5 my-2 text-xs font-mono">
+          <!-- Populated dynamically by JS -->
+        </div>
+        <div class="flex items-center justify-between text-xs font-mono text-slate-400 pt-1 border-t border-slate-800">
+          <span>Lock-free Per-Core Flow Table (경합 0%)</span>
+          <span id="core-summary-txt" class="text-emerald-400">평균 코어 부하: 42% (Adaptive QoS 정상)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. BOTTOM MULTI-TAB SOC OPERATIONAL WORKBENCH -->
+    <section class="card-panel rounded-lg p-4 space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+        <div class="flex flex-wrap items-center gap-1.5 text-xs">
+          <button onclick="switchSocTab('alerts')" id="tab-btn-alerts" class="px-3 py-1.5 rounded font-bold bg-sky-500 text-slate-950 transition">
+            ① 실시간 경보 &amp; PCAP 헥사 포렌식
+          </button>
+          <button onclick="switchSocTab('xdp')" id="tab-btn-xdp" class="px-3 py-1.5 rounded font-bold bg-slate-900 text-slate-300 hover:text-white border border-slate-700 transition">
+            ② Tier-0 eBPF/XDP 실시간 차단 제어 (SOAR 연동)
+          </button>
+          <button onclick="switchSocTab('assets')" id="tab-btn-assets" class="px-3 py-1.5 rounded font-bold bg-slate-900 text-slate-300 hover:text-white border border-slate-700 transition">
+            ③ 보호 서버 자산 CMDB (오탐 억제 DB)
+          </button>
+          <button onclick="switchSocTab('rules')" id="tab-btn-rules" class="px-3 py-1.5 rounded font-bold bg-slate-900 text-slate-300 hover:text-white border border-slate-700 transition">
+            ④ 하이브리드 확장 룰셋 &amp; Shadow 시뮬레이션
+          </button>
+          <button onclick="switchSocTab('audit')" id="tab-btn-audit" class="px-3 py-1.5 rounded font-bold bg-slate-900 text-slate-300 hover:text-white border border-slate-700 transition">
+            ⑤ KCMVP 보안 감사 추적 (CC인증/보안기능확인서)
+          </button>
+        </div>
+        <span class="font-mono text-xs text-slate-400">Polyglot DB: eBPF Map + PostgreSQL + ClickHouse</span>
+      </div>
+
+      <!-- TAB 1: Real-Time Alerts & Deep Packet PCAP Hex Inspector -->
+      <div id="tab-view-alerts" class="grid grid-cols-1 lg:grid-cols-12 gap-3 text-xs">
+        <div class="lg:col-span-7 overflow-x-auto">
+          <table class="w-full text-left border-collapse font-mono">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400">
+                <th class="py-2 px-2">시각 / 압축건수</th>
+                <th class="py-2 px-2">공격자 ➔ 보호 서버</th>
+                <th class="py-2 px-2">탐지 계층 &amp; 시그니처</th>
+                <th class="py-2 px-2">컨텍스트 위험도</th>
+                <th class="py-2 px-2">인라인 판정</th>
+              </tr>
+            </thead>
+            <tbody id="alerts-tbody" class="divide-y divide-slate-800/80">
+              <!-- JS populated -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Deep Packet PCAP Time-Machine & Hex/ASCII Viewer -->
+        <div class="lg:col-span-5 card-sub rounded-lg p-3 space-y-2 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+              <span id="pcap-title" class="font-bold text-sky-400">PCAP Time-Machine 패킷 포렌식 뷰어</span>
+              <span id="pcap-flow-badge" class="px-2 py-0.5 rounded bg-slate-800 font-mono text-xs text-slate-300">Flow ID: --</span>
+            </div>
+
+            <!-- Context Risk Formula Box -->
+            <div id="pcap-formula" class="mt-2 p-2 rounded bg-slate-900 border border-slate-800 font-mono text-xs text-amber-300">
+              컨텍스트 위험도 산출식 로딩 중...
+            </div>
+
+            <!-- Raw Wire vs Normalized L7 Payload Diff -->
+            <div class="mt-2 space-y-1 font-mono text-xs">
+              <div class="text-slate-400">• 난독화 원본(Raw Wire) vs L7 Normalizer 복원 페이로드:</div>
+              <div id="pcap-raw" class="p-1.5 rounded bg-slate-950 border border-slate-800 text-slate-400 break-all"></div>
+              <div id="pcap-norm" class="p-1.5 rounded bg-slate-950 border border-red-500/40 text-emerald-400 break-all"></div>
+            </div>
+
+            <!-- Authentic Hex / ASCII Dump -->
+            <div class="mt-2">
+              <div class="text-slate-400 font-mono text-xs mb-1">• 원시 패킷 프레임 Hex / ASCII 덤프 (Pre/Post Ring-Buffer):</div>
+              <div id="pcap-hexdump" class="p-2 rounded bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 h-28 overflow-y-auto space-y-0.5">
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-slate-800 flex items-center justify-between font-mono text-xs text-slate-400">
+            <span id="pcap-uri-txt">s3://forensics/...</span>
+            <span class="text-emerald-400">● 전후 패킷 캡처 완료</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: Tier-0 eBPF LPM Trie Map & SOAR Live Mitigation -->
+      <div id="tab-view-xdp" class="hidden space-y-3 text-xs">
+        <div class="card-sub rounded-lg p-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="font-bold text-slate-100">Tier-0 eBPF `blacklist_map` (BPF_MAP_TYPE_LPM_TRIE) 실시간 IP/CIDR 차단 주입기</div>
+            <p class="text-slate-400 mt-0.5">SOAR 플레이북이나 관제사가 위협 IP/서브넷을 입력하면 커널 재컴파일 없이 3.5ms 이내에 XDP 드라이버 레벨에서 즉시 소멸(`XDP_DROP`)시키고 상위 라우터로 BGP Flowspec을 전파합니다.</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 font-mono">
+            <input id="input-xdp-ip" type="text" placeholder="예: 198.51.100.77/32" value="198.51.100.77/32" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:border-sky-400 outline-none" />
+            <select id="input-xdp-reason" class="px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-slate-100 text-xs">
+              <option value="SOAR_PLAYBOOK_AUTO">SOAR_PLAYBOOK_AUTO</option>
+              <option value="CTI_URGENT_IOC">CTI_URGENT_IOC</option>
+              <option value="SOC_ANALYST_MANUAL">SOC_ANALYST_MANUAL</option>
+            </select>
+            <button onclick="apiAddXdpBlock()" class="px-3 py-1.5 rounded bg-red-500 hover:bg-red-400 text-white font-bold transition">
+              + eBPF 즉시 차단 등록
+            </button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse font-mono">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400">
+                <th class="py-2 px-2">차단 IP / CIDR (LPM Key)</th>
+                <th class="py-2 px-2">차단 사유 코드</th>
+                <th class="py-2 px-2">연관 룰 ID</th>
+                <th class="py-2 px-2">XDP 누적 차단 패킷 (Per-CPU)</th>
+                <th class="py-2 px-2">XDP 누적 차단 바이트</th>
+                <th class="py-2 px-2">TTL (초)</th>
+                <th class="py-2 px-2">제어</th>
+              </tr>
+            </thead>
+            <tbody id="xdp-tbody" class="divide-y divide-slate-800">
+              <!-- JS populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 3: Protected Server Assets CMDB (False Positive Suppression) -->
+      <div id="tab-view-assets" class="hidden space-y-2 text-xs">
+        <div class="card-sub rounded p-2.5 text-slate-300">
+          내부 CMDB 및 취약점 스캐너와 동기화된 보호 대상 서버 목록입니다. 타겟 서버의 OS 계열에 맞춰 **Target-based TCP 스트림 재조합 정책**을 자동 선택하며, 구동 서비스와 무관한 공격은 `VulnMatchFactor = 0.1`로 감산하여 업무 중단(오차단)을 원천 방지합니다.
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse font-mono">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400">
+                <th class="py-2 px-2">보호 자산 IP</th>
+                <th class="py-2 px-2">호스트명 / Zone</th>
+                <th class="py-2 px-2">OS 계열 (TCP 재조합 정책)</th>
+                <th class="py-2 px-2">구동 애플리케이션 스택</th>
+                <th class="py-2 px-2">미패치 CVE</th>
+                <th class="py-2 px-2">중요도</th>
+                <th class="py-2 px-2">오탐 자동 억제 건수</th>
+              </tr>
+            </thead>
+            <tbody id="assets-tbody" class="divide-y divide-slate-800">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 4: Hybrid Extended Signature Rules & Shadow Mode -->
+      <div id="tab-view-rules" class="hidden space-y-2 text-xs">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse font-mono">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400">
+                <th class="py-2 px-2">SID / Rev</th>
+                <th class="py-2 px-2">시그니처 타이틀</th>
+                <th class="py-2 px-2">대상 OS / 스택</th>
+                <th class="py-2 px-2">MITRE ATT&amp;CK</th>
+                <th class="py-2 px-2">차세대 확장 룰 구문 (`context.*`, `xdp.offload_block`, `ai.*`)</th>
+              </tr>
+            </thead>
+            <tbody id="rules-tbody" class="divide-y divide-slate-800">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 5: KCMVP Chained HMAC Audit Trail -->
+      <div id="tab-view-audit" class="hidden space-y-2 text-xs">
+        <div class="card-sub rounded p-2.5 text-slate-300 flex items-center justify-between">
+          <span>국가용 보안요구사항 V3.0 (FAU 보안 감사 / FCS 암호 지원) 준수를 위해 모든 제어 명령은 이전 레코드 해시와 연결된 **체인형 KCMVP HMAC-SHA256 서명**과 함께 기록됩니다.</span>
+          <span class="font-mono text-emerald-400 font-bold">● 무결성 체인 검증 완료</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse font-mono">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400">
+                <th class="py-2 px-2">ID</th>
+                <th class="py-2 px-2">시각 (KST)</th>
+                <th class="py-2 px-2">역할 / IP</th>
+                <th class="py-2 px-2">행위 유형</th>
+                <th class="py-2 px-2">대상 리소스 &amp; 상세</th>
+                <th class="py-2 px-2">KCMVP Chained HMAC-SHA256 서명</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody" class="divide-y divide-slate-800">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <script>
+    let latestTelemetry = null;
+    let selectedStage = 'stage2';
+
+    const stageDescriptions = {
+      stage1: {
+        badge: "STAGE 1 아키텍처 역할",
+        title: "외부 인터넷 경계 라우터 (WAN / BGP Edge Router)",
+        desc: "외부 ISP로부터 40G~100Gbps 트래픽이 인입되는 최전방 라우터입니다. STAGE 2(Pre-Firewall IDS/IPS)가 대규모 볼륨 공격자 대역을 식별하여 BGP Flowspec으로 공지하면 ISP 백본 단에서 즉시 Blackhole 처리하여 회선 포화를 막습니다.",
+        kpis: [
+          "• BGP Flowspec 연동 지연: < 150 ms",
+          "• 광 인터페이스: Dual 40GBASE-LR",
+          "• STAGE 2 Bypass NIC와 광케이블 직결"
+        ]
+      },
+      stage2: {
+        badge: "STAGE 2 아키텍처 역할 (현재 개발 시스템)",
+        title: "1차 방어선: Pre-Firewall S/W IDS/IPS (Tier 1 XDP + Tier 2 Rust DPI + Tier 3 AI)",
+        desc: "방화벽 앞단에서 고가의 물리 IPS 장비를 대체하는 핵심 소프트웨어 엔진입니다. Tier 1(eBPF/XDP)이 볼륨 공격과 불량 TCP 플래그를 커널 메모리 할당 전에 소멸시키고 Elephant Flow를 우회시키며, Tier 2(Rust AF_XDP + Vectorscan)가 Target-OS 재조합 및 자산 컨텍스트 기반 L7 정밀 차단을 수행합니다.",
+        kpis: [
+          "• Tier 1 XDP 필터링: 59.5 Mpps (18 ns)",
+          "• Tier 2 L7 DPI 지연: 평균 38.4 μs",
+          "• RCU 룰 핫스왑: 패킷 드롭 0개"
+        ]
+      },
+      stage3: {
+        badge: "STAGE 3 아키텍처 역할",
+        title: "2차 방어선: 차세대 방화벽 (NGFW)",
+        desc: "방화벽은 Stateful 세션 테이블을 유지하므로 대량의 SYN Flood나 스캐닝이 직접 닿으면 세션 테이블이 100% 고갈되어 전사 네트워크가 마비됩니다. 앞단의 Pre-Firewall IDS/IPS가 악성 트래픽을 99.9% 사전 제거해 주므로 방화벽은 세션 점유율 18% 이하의 쾌적한 상태로 내부 접근통제에만 집중합니다.",
+        kpis: [
+          "• IPS 가동 시 세션 점유율: 17.9% (안전)",
+          "• IPS 미적용 시 세션 점유율: 100% (마비)",
+          "• 방화벽 유입 대역폭 절감: 최대 65% 절감"
+        ]
+      },
+      stage4: {
+        badge: "STAGE 4 아키텍처 역할",
+        title: "내부 코어 스위치 / SSL 가시성 장비 / 네트워크 TAP",
+        desc: "방화벽을 통과한 정화된 트래픽이 DMZ 및 내부 서버망으로 분배되는 백본 구간입니다. 스위치의 SPAN/TAP 미러링 포트를 통해 내부 동서(East-West) 트래픽 사본을 Pre-Firewall IDS/IPS의 보조 감시 포트로 전달하여 내부 측면 이동(Lateral Movement)까지 통합 탐지합니다.",
+        kpis: [
+          "• 인라인 구간 패킷 손실: 0.000%",
+          "• East-West TAP 미러링: 6.4 Gbps",
+          "• 802.1Q VLAN / VXLAN 디캡슐레이션"
+        ]
+      },
+      stage5: {
+        badge: "STAGE 5 아키텍처 역할",
+        title: "내부 보호 서버군(CMDB 428대) & SOC 통합 보안솔루션 (SIEM / SOAR / CTI)",
+        desc: "최종 보호 대상인 웹/WAS/DB 서버들과 보안관제 플랫폼입니다. CMDB의 서버별 OS/CVE 정보를 IPS에 실시간 공급하여 오탐(False Positive)을 0건으로 억제하고, IPS는 Smart Aggregator로 98.4% 압축된 경보와 PCAP 타임머신 링크를 SIEM/SOAR에 전송해 자동 격리 플레이북을 구동합니다.",
+        kpis: [
+          "• 보호 서버 가용성(SLA): 99.999%",
+          "• SIEM EPS 라이선스 절감: 98.4% 절감",
+          "• SOAR 차단 API ➔ XDP 반영: 3.4 ms"
+        ]
+      }
+    };
+
+    async function fetchTelemetry() {
+      try {
+        const res = await fetch('/api/v1/architecture/telemetry');
+        const data = await res.json();
+        latestTelemetry = data;
+        renderTelemetry(data);
+      } catch (e) {
+        document.getElementById('conn-badge').textContent = "● API OFFLINE";
+        document.getElementById('conn-badge').className = "px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/40 font-mono text-xs";
+      }
+    }
+
+    function renderTelemetry(data) {
+      const rt = data.runtime;
+      const st1 = data.stages.stage1_wan_router;
+      const st2 = data.stages.stage2_pre_fw_ips;
+      const st3 = data.stages.stage3_ngfw;
+      const st4 = data.stages.stage4_core_network;
+      const st5 = data.stages.stage5_servers_and_soc;
+
+      // Header controls
+      const bypassEl = document.getElementById('hdr-bypass-state');
+      if (rt.bypass_nic_mode === 'INLINE') {
+        bypassEl.textContent = "INLINE (8ms Watchdog)";
+        bypassEl.className = "font-mono font-bold text-emerald-400";
+      } else {
+        bypassEl.textContent = "FAIL-OPEN (물리 릴레이 직결)";
+        bypassEl.className = "font-mono font-bold text-amber-400";
+      }
+      document.getElementById('hdr-rcu-ver').textContent = `v1.0.${rt.active_rule_ver} (${rt.active_rules_count.toLocaleString()} Rules)`;
+
+      // Scenario buttons highlight
+      ['normal', 'volumetric', 'apt', 'evasion'].forEach(sc => {
+        const b = document.getElementById('btn-sc-' + sc);
+        if (rt.scenario === sc) {
+          b.className = "px-3 py-1.5 rounded border-2 border-sky-400 bg-sky-500/10 text-sky-300 font-bold transition";
+        } else {
+          b.className = "px-3 py-1.5 rounded border border-slate-700 bg-slate-900 text-slate-300 hover:border-sky-400 font-medium transition";
+        }
+      });
+
+      // IPS ON/OFF toggle highlight
+      const onBtn = document.getElementById('btn-ips-on');
+      const offBtn = document.getElementById('btn-ips-off');
+      if (rt.ips_enabled) {
+        onBtn.className = "px-2.5 py-1 rounded font-mono font-bold bg-sky-500 text-slate-950 transition";
+        offBtn.className = "px-2.5 py-1 rounded font-mono text-slate-400 hover:text-slate-200 transition";
+      } else {
+        onBtn.className = "px-2.5 py-1 rounded font-mono text-slate-400 hover:text-slate-200 transition";
+        offBtn.className = "px-2.5 py-1 rounded font-mono font-bold bg-red-500 text-white transition";
+      }
+
+      // Top KPI Cards
+      document.getElementById('kpi-wan-gbps').textContent = `${st1.ingress_gbps.toFixed(1)} Gbps`;
+      document.getElementById('kpi-wan-mpps').textContent = `${st1.ingress_mpps.toFixed(1)} Mpps`;
+      const atkPct = ((st1.attack_gbps / st1.ingress_gbps) * 100).toFixed(1);
+      document.getElementById('kpi-wan-sub').textContent = `악성 공격 트래픽: ${st1.attack_gbps.toFixed(1)} Gbps (${atkPct}%)`;
+
+      const ipsActive = rt.ips_enabled && rt.bypass_nic_mode === 'INLINE';
+      const kpiIpsRate = document.getElementById('kpi-ips-rate');
+      if (ipsActive) {
+        kpiIpsRate.textContent = `${st2.mitigation_rate_pct}% 정화`;
+        kpiIpsRate.className = "text-2xl font-extrabold font-mono tabular-nums text-emerald-400";
+        document.getElementById('kpi-ips-lat').textContent = `지연: ${st2.inline_latency_us} μs`;
+        document.getElementById('kpi-ips-sub').textContent = `XDP Drop: ${st2.xdp_drop_gbps}G | DPI Drop: ${st2.dpi_drop_gbps}G | Shunt: ${st2.elephant_shunt_gbps}G`;
+      } else {
+        kpiIpsRate.textContent = "0% (바이패스)";
+        kpiIpsRate.className = "text-2xl font-extrabold font-mono tabular-nums text-red-400";
+        document.getElementById('kpi-ips-lat').textContent = "지연: 0 μs (직결)";
+        document.getElementById('kpi-ips-sub').textContent = "🚨 1차 방어선 비활성: 모든 공격이 방화벽으로 직격!";
+      }
+
+      const kpiFwCpu = document.getElementById('kpi-fw-cpu');
+      const kpiFwSess = document.getElementById('kpi-fw-sess');
+      const kpiFwSub = document.getElementById('kpi-fw-sub');
+      kpiFwCpu.textContent = `CPU ${st3.cpu_usage_pct}%`;
+      kpiFwSess.textContent = `세션: ${st3.session_table_pct}% (${(st3.active_sessions/10000).toFixed(0)}만)`;
+      if (ipsActive) {
+        kpiFwCpu.className = "text-2xl font-extrabold font-mono tabular-nums text-emerald-400";
+        kpiFwSess.className = "text-xs font-mono text-emerald-400";
+        kpiFwSub.textContent = `● 방화벽 도달: ${st3.ingress_gbps} Gbps (대역폭 ${st3.bandwidth_saved_pct}% 절감)`;
+        kpiFwSub.className = "mt-1.5 text-xs font-mono text-emerald-400";
+      } else {
+        kpiFwCpu.className = "text-2xl font-extrabold font-mono tabular-nums text-red-400";
+        kpiFwSess.className = "text-xs font-mono text-red-400";
+        kpiFwSub.textContent = `🚨 방화벽 상태: ${st3.status} (세션 고갈/침해 발생)`;
+        kpiFwSub.className = "mt-1.5 text-xs font-mono text-red-400";
+      }
+
+      document.getElementById('kpi-soc-eps').textContent = `-${st5.siem_eps_reduction_pct}% EPS`;
+      const slaEl = document.getElementById('kpi-soc-sla');
+      slaEl.textContent = `SLA: ${st5.service_sla_pct}%`;
+      slaEl.className = ipsActive ? "text-xs font-mono text-emerald-400" : "text-xs font-mono text-red-400";
+      document.getElementById('kpi-soc-sub').textContent = `원시 ${st5.raw_alert_eps.toLocaleString()} ➔ 압축 ${st5.siem_compressed_eps.toLocaleString()} EPS | 오차단: ${st5.false_positive_blocks}건`;
+
+      // 5-Stage Pipeline Boxes
+      document.getElementById('st1-gbps').textContent = `${st1.ingress_gbps.toFixed(1)} Gbps`;
+      document.getElementById('st1-mpps').textContent = `${st1.ingress_mpps.toFixed(1)} Mpps`;
+      document.getElementById('st1-bgp').textContent = `${st1.bgp_flowspec_active_prefixes} Prefixes`;
+
+      const st2Mode = document.getElementById('st2-mode');
+      if (ipsActive) {
+        st2Mode.textContent = "● ACTIVE INLINE";
+        st2Mode.className = "font-mono text-xs text-emerald-400";
+        document.getElementById('st2-t1').textContent = `Drop: ${st2.xdp_drop_gbps}G`;
+        document.getElementById('st2-t2').textContent = `Drop: ${st2.dpi_drop_gbps}G`;
+        document.getElementById('st2-t3').textContent = `Shunt: ${st2.elephant_shunt_gbps}G`;
+        document.getElementById('st2-ratio-txt').textContent = `악성 ${(st2.xdp_drop_gbps + st2.dpi_drop_gbps).toFixed(1)}G 소멸 ➔ 정화 ${st3.ingress_gbps.toFixed(1)}G 전달`;
+        document.getElementById('st2-ratio-txt').className = "font-bold text-emerald-400";
+
+        const dropW = Math.round(((st2.xdp_drop_gbps + st2.dpi_drop_gbps) / st1.ingress_gbps) * 100);
+        const shuntW = Math.round((st2.elephant_shunt_gbps / st1.ingress_gbps) * 100);
+        const cleanW = Math.max(5, 100 - dropW - shuntW);
+        document.getElementById('st2-bar-drop').style.width = `${dropW}%`;
+        document.getElementById('st2-bar-shunt').style.width = `${shuntW}%`;
+        document.getElementById('st2-bar-clean').style.width = `${cleanW}%`;
+      } else {
+        st2Mode.textContent = "▲ BYPASSED (직결)";
+        st2Mode.className = "font-mono text-xs text-red-400";
+        document.getElementById('st2-t1').textContent = "BYPASSED";
+        document.getElementById('st2-t2').textContent = "BYPASSED";
+        document.getElementById('st2-t3').textContent = "BYPASSED";
+        document.getElementById('st2-ratio-txt').textContent = "경고: 1차 방어선 우회됨 (원시 트래픽 방화벽 직격)";
+        document.getElementById('st2-ratio-txt').className = "font-bold text-red-400";
+        document.getElementById('st2-bar-drop').style.width = `100%`;
+        document.getElementById('st2-bar-shunt').style.width = `0%`;
+        document.getElementById('st2-bar-clean').style.width = `0%`;
+      }
+
+      document.getElementById('st3-gbps').textContent = `${st3.ingress_gbps.toFixed(1)} Gbps`;
+      document.getElementById('st3-gbps').className = ipsActive ? "font-bold text-emerald-400" : "font-bold text-red-400";
+      document.getElementById('st3-sess').textContent = `${st3.session_table_pct}% (${(st3.active_sessions/10000).toFixed(0)}만)`;
+      document.getElementById('st3-sess').className = ipsActive ? "text-emerald-400" : "text-red-400";
+      document.getElementById('st3-status').textContent = st3.status;
+      document.getElementById('st3-status').className = ipsActive ? "font-bold text-emerald-400" : "font-bold text-red-400";
+
+      document.getElementById('st4-drop').textContent = `${st4.packet_drop_pct.toFixed(3)}%`;
+      document.getElementById('st4-drop').className = st4.packet_drop_pct === 0 ? "text-emerald-400" : "text-red-400";
+      document.getElementById('st4-status').textContent = st4.status;
+      document.getElementById('st4-status').className = st4.status === "OPTIMAL" ? "font-bold text-emerald-400" : "font-bold text-red-400";
+
+      document.getElementById('st5-sla').textContent = `${st5.service_sla_pct}%`;
+      document.getElementById('st5-sla').className = ipsActive ? "font-bold text-emerald-400" : "font-bold text-red-400";
+      document.getElementById('st5-eps').textContent = `${st5.siem_compressed_eps.toLocaleString()} EPS`;
+      document.getElementById('st5-fp').textContent = `${st5.false_positive_blocks} 건`;
+      document.getElementById('st5-fp').className = st5.false_positive_blocks === 0 ? "text-emerald-400" : "text-red-400";
+
+      // Draw Live Time-Series Chart
+      drawTimeSeriesChart(data.time_series);
+
+      // Render 32-Core Matrix
+      render32CoreMatrix(data.cores_32);
+
+      // Render XDP Blacklist Table
+      renderXdpTable(data.ebpf_blacklist_entries);
+    }
+
+    function drawTimeSeriesChart(series) {
+      const canvas = document.getElementById('telemetryChart');
+      if (!canvas || !series || series.length === 0) return;
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width;
+      const H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      // Background grid
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      for (let i = 1; i <= 4; i++) {
+        const y = (H / 5) * i;
+        ctx.beginPath();
+        ctx.moveTo(40, y);
+        ctx.lineTo(W - 10, y);
+        ctx.stroke();
+      }
+
+      // Y-axis labels (0 ~ 45 Gbps)
+      ctx.fillStyle = '#64748b';
+      ctx.font = '11px monospace';
+      [45, 30, 15, 0].forEach((val, idx) => {
+        const y = 18 + idx * ((H - 28) / 3);
+        ctx.fillText(`${val}G`, 6, y);
+      });
+
+      const maxVal = 45.0;
+      const plotW = W - 55;
+      const plotH = H - 28;
+      const stepX = plotW / Math.max(1, series.length - 1);
+
+      function plotLine(keyFn, color, fillAlpha) {
+        ctx.beginPath();
+        series.forEach((pt, i) => {
+          const x = 42 + i * stepX;
+          const v = Math.min(maxVal, Math.max(0, keyFn(pt)));
+          const y = 12 + plotH - (v / maxVal) * plotH;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
+
+        if (fillAlpha) {
+          ctx.lineTo(42 + (series.length - 1) * stepX, 12 + plotH);
+          ctx.lineTo(42, 12 + plotH);
+          ctx.closePath();
+          ctx.fillStyle = fillAlpha;
+          ctx.fill();
+        }
+      }
+
+      // 1. WAN Total Ingress (Slate/White)
+      plotLine(d => d.wan_gbps, '#94a3b8', 'rgba(148, 163, 184, 0.08)');
+      // 2. IPS Pre-Firewall Mitigated (XDP + DPI Drop) (Red)
+      plotLine(d => d.xdp_drop_gbps + d.dpi_drop_gbps, '#ef4444', 'rgba(239, 68, 68, 0.16)');
+      // 3. Clean Traffic Reaching NGFW (Emerald)
+      plotLine(d => d.ngfw_in_gbps, '#10b981', 'rgba(16, 185, 129, 0.14)');
+    }
+
+    function render32CoreMatrix(cores) {
+      const container = document.getElementById('core-matrix');
+      if (!container || !cores) return;
+      container.innerHTML = '';
+      let sumCpu = 0;
+      cores.forEach(c => {
+        sumCpu += c.total_cpu_pct;
+        let bg = 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300';
+        if (c.total_cpu_pct > 75) bg = 'bg-amber-500/25 border-amber-500/50 text-amber-300';
+        if (c.total_cpu_pct > 90) bg = 'bg-red-500/25 border-red-500/50 text-red-300';
+        if (c.total_cpu_pct < 5) bg = 'bg-slate-800 border-slate-700 text-slate-500';
+
+        const div = document.createElement('div');
+        div.className = `p-1 rounded border text-center ${bg}`;
+        div.title = `Core #${c.core_id} (NUMA ${c.numa_node}) | XDP: ${c.xdp_cpu_pct}% | DPI: ${c.dpi_cpu_pct}% | ${c.throughput_mpps} Mpps`;
+        div.innerHTML = `<div class="text-[10px] opacity-75">C${c.core_id}</div><div class="font-bold text-xs">${Math.round(c.total_cpu_pct)}%</div>`;
+        container.appendChild(div);
+      });
+      const avg = (sumCpu / cores.length).toFixed(1);
+      document.getElementById('core-summary-txt').textContent = `32코어 평균 부하: ${avg}% (Symmetric RSS 무잠금 분산)`;
+    }
+
+    function renderXdpTable(entries) {
+      const tbody = document.getElementById('xdp-tbody');
+      if (!tbody || !entries) return;
+      tbody.innerHTML = '';
+      entries.forEach(e => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-900/60";
+        tr.innerHTML = `
+          <td class="py-2 px-2 font-bold text-red-400">${e.ip_cidr}</td>
+          <td class="py-2 px-2 text-sky-400">${e.reason_code}</td>
+          <td class="py-2 px-2">${e.rule_id}</td>
+          <td class="py-2 px-2 font-bold text-slate-100">${e.hit_packets.toLocaleString()} pkts</td>
+          <td class="py-2 px-2 text-slate-300">${(e.hit_bytes / 1048576).toFixed(2)} MB</td>
+          <td class="py-2 px-2">${e.ttl_seconds}s</td>
+          <td class="py-2 px-2">
+            <button onclick="apiDeleteXdpBlock('${e.ip_cidr}')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-red-500/30 text-slate-300 hover:text-red-300 border border-slate-700">
+              해제
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadAlertsAndForensics() {
+      const res = await fetch('/api/v1/alerts');
+      const data = await res.json();
+      const tbody = document.getElementById('alerts-tbody');
+      tbody.innerHTML = '';
+      data.alerts.forEach((a, idx) => {
+        const riskColor = a.final_risk_score >= 25 ? 'text-red-400' : (a.final_risk_score >= 15 ? 'text-amber-400' : 'text-emerald-400');
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-900/80 cursor-pointer transition";
+        tr.onclick = () => inspectPcapFlow(a.flow_id);
+        tr.innerHTML = `
+          <td class="py-2 px-2 whitespace-nowrap">
+            <div class="text-slate-200">${a.time}</div>
+            <div class="text-sky-400 text-[11px]">${a.aggregated_count.toLocaleString()}건 압축</div>
+          </td>
+          <td class="py-2 px-2 whitespace-nowrap">
+            <div class="text-red-300">${a.src_ip} (${a.src_country})</div>
+            <div class="text-slate-400 text-[11px]">➔ ${a.dst_ip}:${a.dst_port}</div>
+          </td>
+          <td class="py-2 px-2">
+            <span class="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 text-[11px]">${a.tier} · SID:${a.rule_id}</span>
+            <div class="font-sans text-slate-100 mt-0.5">${a.title}</div>
+          </td>
+          <td class="py-2 px-2 font-bold whitespace-nowrap ${riskColor}">
+            ${a.final_risk_score.toFixed(1)} 점
+          </td>
+          <td class="py-2 px-2 whitespace-nowrap text-slate-200">${a.action}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      if (data.alerts.length > 0) {
+        inspectPcapFlow(data.alerts[0].flow_id);
+      }
+    }
+
+    async function inspectPcapFlow(flowId) {
+      const res = await fetch(`/api/v1/forensics/pcap/${flowId}`);
+      const data = await res.json();
+      const a = data.alert;
+      const sb = data.scoring_breakdown;
+
+      document.getElementById('pcap-title').textContent = `[PCAP 포렌식] ${a.title}`;
+      document.getElementById('pcap-flow-badge').textContent = `Flow ID: ${data.flow_id}`;
+      document.getElementById('pcap-formula').textContent =
+        `Risk(${sb.final_risk_score}) = BaseSeverity(${sb.base_severity}) × AssetCrit(${sb.asset_criticality}) × VulnMatchFactor(${sb.vuln_match_factor})`;
+      document.getElementById('pcap-raw').textContent = `[Wire] ${a['raw_payload_ wire']}`;
+      document.getElementById('pcap-norm').textContent = `[Normalized] ${a.normalized_payload}`;
+      document.getElementById('pcap-uri-txt').textContent = `${a.pcap_uri} (Pre ${a.pcap_pre_pkts} / Post ${a.pcap_post_pkts} pkts)`;
+
+      const hexBox = document.getElementById('pcap-hexdump');
+      hexBox.innerHTML = data.hex_dump.map(line =>
+        `<div class="flex gap-3"><span class="text-slate-500">${line.offset}</span><span class="text-sky-300">${line.hex}</span><span class="text-amber-300">${line.ascii}</span></div>`
+      ).join('');
+    }
+
+    async function loadStaticTables() {
+      // Assets
+      const aRes = await fetch('/api/v1/context/assets');
+      const aData = await aRes.json();
+      document.getElementById('assets-tbody').innerHTML = aData.assets.map(x => `
+        <tr class="hover:bg-slate-900/60">
+          <td class="py-2 px-2 font-bold text-sky-400">${x.ip_cidr}</td>
+          <td class="py-2 px-2">${x.hostname} <span class="text-slate-400">(${x.zone})</span></td>
+          <td class="py-2 px-2"><span class="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400">${x.os_family}</span> ${x.os_version}</td>
+          <td class="py-2 px-2 text-slate-300">${x.running_services}</td>
+          <td class="py-2 px-2 text-amber-400">${x.known_cves}</td>
+          <td class="py-2 px-2 font-bold text-red-400">Lv.${x.criticality}</td>
+          <td class="py-2 px-2 text-emerald-400 font-bold">${x.fp_suppressed_count.toLocaleString()}건 오차단 방지</td>
+        </tr>
+      `).join('');
+
+      // Rules
+      const rRes = await fetch('/api/v1/policies/rules');
+      const rData = await rRes.json();
+      document.getElementById('rules-tbody').innerHTML = rData.rules.map(r => `
+        <tr class="hover:bg-slate-900/60">
+          <td class="py-2 px-2 font-bold text-sky-400">${r.rule_id} <span class="text-slate-400">(v${r.rev})</span></td>
+          <td class="py-2 px-2 font-sans text-slate-100">${r.title}</td>
+          <td class="py-2 px-2 text-emerald-400">${r.target_os} / ${r.target_tech}</td>
+          <td class="py-2 px-2 text-amber-400">${r.mitre_id}</td>
+          <td class="py-2 px-2 text-slate-300 text-[11px] break-all">${r.raw_syntax}</td>
+        </tr>
+      `).join('');
+
+      // Audits
+      await refreshAuditTable();
+    }
+
+    async function refreshAuditTable() {
+      const auRes = await fetch('/api/v1/compliance/audits');
+      const auData = await auRes.json();
+      document.getElementById('audit-tbody').innerHTML = auData.audits.map(a => `
+        <tr class="hover:bg-slate-900/60">
+          <td class="py-1.5 px-2 text-slate-400">#${a.audit_id}</td>
+          <td class="py-1.5 px-2">${a.created_at.replace('T', ' ').substring(0, 19)}</td>
+          <td class="py-1.5 px-2 text-sky-400">${a.actor_role} (${a.actor_ip})</td>
+          <td class="py-1.5 px-2 font-bold text-emerald-400">${a.action_type}</td>
+          <td class="py-1.5 px-2 text-slate-300">${a.target_resource} <span class="text-slate-500">${a.detail_json}</span></td>
+          <td class="py-1.5 px-2 text-amber-300/90 text-[11px]">${a.kcmvp_hmac.substring(0, 36)}...</td>
+        </tr>
+      `).join('');
+    }
+
+    // Control Actions
+    async function apiSetScenario(sc) {
+      await fetch('/api/v1/architecture/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario: sc })
+      });
+      await fetchTelemetry();
+    }
+
+    async function apiSetIpsEnabled(flag) {
+      await fetch('/api/v1/architecture/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ips_enabled: flag })
+      });
+      await fetchTelemetry();
+      await refreshAuditTable();
+    }
+
+    async function apiToggleBypass() {
+      const nextMode = (latestTelemetry && latestTelemetry.runtime.bypass_nic_mode === 'INLINE') ? 'FAIL_OPEN' : 'INLINE';
+      await fetch('/api/v1/architecture/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bypass_nic_mode: nextMode })
+      });
+      await fetchTelemetry();
+      await refreshAuditTable();
+    }
+
+    async function apiTriggerRcuSwap() {
+      const res = await fetch('/api/v1/policies/rules/hot-reload', { method: 'POST' });
+      const data = await res.json();
+      await fetchTelemetry();
+      await refreshAuditTable();
+      alert(`[RCU 무중단 Hot-Swap 완료]\n• 신규 버전: ${data.new_version}\n• 활성 룰 수: ${data.active_rules_count.toLocaleString()}개\n• 포인터 교체 소요시간: ${data.rcu_atomic_swap_ms} ms\n• 패킷 유실: ${data.packet_loss_during_swap} 개`);
+    }
+
+    async function apiAddXdpBlock() {
+      const ip = document.getElementById('input-xdp-ip').value;
+      const reason = document.getElementById('input-xdp-reason').value;
+      if (!ip) return;
+      await fetch('/api/v1/mitigation/xdp-block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip_cidr: ip, reason_code: reason, ttl_seconds: 7200, propagate_bgp: true })
+      });
+      await fetchTelemetry();
+      await refreshAuditTable();
+    }
+
+    async function apiDeleteXdpBlock(cidr) {
+      await fetch(`/api/v1/mitigation/xdp-block?ip_cidr=${encodeURIComponent(cidr)}`, { method: 'DELETE' });
+      await fetchTelemetry();
+      await refreshAuditTable();
+    }
+
+    function selectStage(stKey) {
+      selectedStage = stKey;
+      ['stage1', 'stage2', 'stage3', 'stage4', 'stage5'].forEach(k => {
+        const el = document.getElementById('box-' + k);
+        if (k === stKey) {
+          el.className = el.className.replace('border-slate-800', '').replace('border-2 border-sky-400', '') + ' border-2 border-sky-400';
+        } else {
+          el.className = el.className.replace('border-2 border-sky-400', '');
+        }
+      });
+      const info = stageDescriptions[stKey];
+      document.getElementById('stage-detail-badge').textContent = info.badge;
+      document.getElementById('stage-detail-title').textContent = info.title;
+      document.getElementById('stage-detail-desc').textContent = info.desc;
+      document.getElementById('stage-detail-kpis').innerHTML = info.kpis.map(x => `<div>${x}</div>`).join('');
+    }
+
+    function switchSocTab(tabKey) {
+      ['alerts', 'xdp', 'assets', 'rules', 'audit'].forEach(k => {
+        const btn = document.getElementById('tab-btn-' + k);
+        const view = document.getElementById('tab-view-' + k);
+        if (k === tabKey) {
+          btn.className = "px-3 py-1.5 rounded font-bold bg-sky-500 text-slate-950 transition";
+          view.classList.remove('hidden');
+        } else {
+          btn.className = "px-3 py-1.5 rounded font-bold bg-slate-900 text-slate-300 hover:text-white border border-slate-700 transition";
+          view.classList.add('hidden');
+        }
+      });
+    }
+
+    // Boot
+    window.addEventListener('DOMContentLoaded', async () => {
+      await fetchTelemetry();
+      await loadAlertsAndForensics();
+      await loadStaticTables();
+      setInterval(fetchTelemetry, 1000);
+    });
+  </script>
+</body>
+</html>

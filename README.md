@@ -1,13 +1,13 @@
 # 🛡️ Pre-Firewall Next-Gen S/W IDS/IPS (`pre-fw-ips`)
 
 > **기업 및 공공기관 1차 방어선(Pre-Firewall) 물리 어플라이언스 대체를 위한 차세대 소프트웨어 정의(Software-Defined) IDS/IPS 프로젝트**  
-> **Current Version:** `v1.0.0` (2026-11-19)
+> **Current Version:** `v1.1.0` (2026-11-21)
 
 ---
 
 ## 📌 프로젝트 개요
 
-본 레포지토리는 차세대 방화벽(NGFW) 전단(WAN 라우터와 방화벽 사이)에 배치되어 대규모 볼륨 공격(DDoS, SYN Flood, 스캐닝) 및 L7 애플리케이션 취약점 공격을 1차적으로 정밀 필터링(Pre-filtering)하는 **eBPF/XDP 및 Rust(AF_XDP + Vectorscan) 기반 초고속 소프트웨어 IDS/IPS**의 종합 기획, 상세 기술 아키텍처, 데이터베이스/API 명세 및 코어 엔진 프로토타입을 포함합니다.
+본 레포지토리는 차세대 방화벽(NGFW) 전단(WAN 라우터와 방화벽 사이)에 배치되어 대규모 볼륨 공격(DDoS, SYN Flood, 스캐닝) 및 L7 애플리케이션 취약점 공격을 1차적으로 정밀 필터링(Pre-filtering)하는 **eBPF/XDP 및 Rust(AF_XDP + Vectorscan) 기반 초고속 소프트웨어 IDS/IPS**의 종합 기획, 상세 기술 아키텍처, 데이터베이스/API 명세, 코어 엔진 프로토타입 및 **실시간 풀스택 SOC 통합 관제 백엔드/웹 대시보드(`ems-server`)**를 포함합니다.
 
 ---
 
@@ -16,7 +16,9 @@
 모든 기획 및 기술 설계 보고서는 버전별로 형상 관리되며 [`docs/`](file:///C:/Users/user/.gemini/antigravity/scratch/pre-fw-ips/docs) 디렉터리 아래에 체계화되어 있습니다.
 
 * **[변경 이력 (CHANGELOG.md)](file:///C:/Users/user/.gemini/antigravity/scratch/pre-fw-ips/docs/CHANGELOG.md)**
-* **[최신 릴리스: `v1.0.0` 보고서 인덱스](file:///C:/Users/user/.gemini/antigravity/scratch/pre-fw-ips/docs/v1.0.0/README.md)**
+* **[최신 릴리스: `v1.1.0` 풀스택 SOC 관제 백엔드 및 대시보드 구축 보고서](file:///C:/Users/user/.gemini/antigravity/scratch/pre-fw-ips/docs/v1.1.0/README.md)**
+  * **[05. SOC 통합 보안 관제(EMS) 백엔드 서버 및 웹 대시보드 구축 보고서](file:///C:/Users/user/.gemini/antigravity/scratch/pre-fw-ips/docs/v1.1.0/05_SOC_EMS_Backend_and_Dashboard_Guide.md)** (`IPS-DOC-2026-V1.1-05`)
+* **[베이스라인 릴리스: `v1.0.0` 보고서 인덱스](file:///C:/Users/user/.gemini/antigravity/scratch/pre-fw-ips/docs/v1.0.0/README.md)**
   1. **[01. 종합기획서 (Master Plan Report)](file:///C:/Users/user/.gemini/antigravity/scratch/pre-fw-ips/docs/v1.0.0/01_Master_Plan_Report.md)**
      * 개발 배경, 물리 장비 대비 TCO 절감 논리, 3-Tier 패킷 아키텍처 개요, 18개월 로드맵
   2. **[02. 상세 기술 아키텍처 설계서 (Technical Architecture Design)](file:///C:/Users/user/.gemini/antigravity/scratch/pre-fw-ips/docs/v1.0.0/02_Technical_Architecture_Design.md)**

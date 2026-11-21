@@ -1,6 +1,22 @@
 # 📑 문서 및 아키텍처 버전 이력 (CHANGELOG)
 
-본 문서는 **차세대 Pre-Firewall S/W IDS/IPS 개발 프로젝트(`pre-fw-ips`)**의 기획서, 상세 기술 아키텍처 설계서, DB/API 명세서 및 검증 계획서의 버전별 개정 이력을 관리합니다.
+본 문서는 **차세대 Pre-Firewall S/W IDS/IPS 개발 프로젝트(`pre-fw-ips`)**의 기획서, 상세 기술 아키텍처 설계서, DB/API 명세서, 백엔드 관제 서버 및 검증 계획서의 버전별 개정 이력을 관리합니다.
+
+---
+
+## [v1.1.0] - 2026-11-21 (Full-Stack SOC EMS Server & Architecture Telemetry Release)
+
+### 🚀 신규 구현 및 문서화 (Added & Enhanced)
+* **`ems-server/app.py` (FastAPI + SQLite3 컨트롤 플레인 & 5단계 아키텍처 실시간 텔레메트리 백엔드 서버)**
+  * Tier-0 인메모리 eBPF `blacklist_map` (LPM Trie) 실시간 패킷/바이트 카운터 및 SOAR 연동 동적 차단/해제 API 구현
+  * Tier-1 SQLite3(`control_plane.db`) 자동 초기화 및 `protected_assets`(CMDB 5개 핵심 서버군), `signature_rules`(차세대 확장 룰셋), `audit_trails`(**체인형 KCMVP HMAC-SHA256 무결성 감사 로그**) 구현
+  * 전사 보안 아키텍처 5단계(STAGE 1 BGP 라우터 $\rightarrow$ STAGE 2 Pre-FW IDS/IPS $\rightarrow$ STAGE 3 차세대 방화벽 $\rightarrow$ STAGE 4 코어 스위치/TAP $\rightarrow$ STAGE 5 내부 서버군 & SIEM/SOAR/CTI) 상관 퍼포먼스 계산 엔진 및 32-Core Symmetric RSS 부하 생성기 구현
+  * `/api/v1/forensics/pcap/{flow_id}` PCAP 타임머신 16바이트 Hex/ASCII 덤프 및 원본(Raw Wire) vs L7 정규화(Normalized) 페이로드 비교 API 구현
+* **`ems-server/static/index.html` (고도화된 실시간 웹 관제 대시보드 UI)**
+  * 1초 주기 REST API 폴링 기반 실시간 시계열 캔버스 차트(`WAN 유입` vs `IPS 차단` vs `NGFW 도달`) 및 32-Core NUMA/RSS 히트맵 매트릭스 탑재
+  * 5탭 SOC 운영 워크벤치(① 실시간 경보 & PCAP 헥사 포렌식, ② Tier-0 eBPF 실시간 차단 제어기, ③ 보호 서버 자산 CMDB, ④ 확장 시그니처 룰셋, ⑤ KCMVP 체인형 HMAC 감사 로그) 구현
+* **`docs/v1.1.0/05_SOC_EMS_Backend_and_Dashboard_Guide.md` (`IPS-DOC-2026-V1.1-05`)**
+  * 백엔드 구성 진행 과정(Step 1~4), API 엔드포인트 명세, 웹 대시보드 검증 가이드 버전화 문서 생성
 
 ---
 
